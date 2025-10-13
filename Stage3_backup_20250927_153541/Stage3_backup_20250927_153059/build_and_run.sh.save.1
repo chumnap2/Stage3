@@ -1,0 +1,141 @@
+#!/bin/bash
+set -e
+
+PROJECT_DIR="$(pwd)"
+BACKUP_DIR="$PROJECT_DIR/backups"
+SRC_DIR="$PROJECT_DIR/minimal_chibios/src"
+BUILD_DIR="$PROJECT_DIR/build"
+
+# === Safety checks ===
+
+if [ ! -f "$SRC_DIR/main.cpp" ]; then
+echo "❌ Essential file missing: $SRC_DIR/main.cpp"
+echo "⚠️ Build aborted. No backup was made."
+exit 1
+fi
+
+# === Backup project ===
+
+mkdir -p "$BACKUP_DIR"
+STAMP=$(date +%Y%m%d_%H%M%S)
+ARCHIVE="$BACKUP_DIR/Stage3_backup_$STAMP.tar.gz"
+
+echo "📦 Backing up Stage3..."
+tar -czf "$ARCHIVE" 
+--exclude="$BACKUP_DIR" 
+--exclude="$BUILD_DIR" 
+.
+echo "✅ Backup completed at $ARCHIVE"
+
+# === Build ===
+
+echo "🧹 Cleaning build directory..."
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR"
+
+echo "⚙️ Compiling sources..."
+arm-none-eabi-g++ -mcpu=cortex-m4 -mthumb -O2 
+-I"$SRC_DIR" 
+"$SRC_DIR/main.cpp" -o "$BUILD_DIR/output.elf"
+
+echo "🚀 Build finished: $BUILD_DIR/output.elf"
+```bash
+#!/bin/bash
+set -euo pipefail
+
+# -----------------------------
+# Project paths
+# -----------------------------
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SRC_DIR="$PROJECT_DIR/minimal_chibios/src"
+BUILD_DIR="$PROJECT_DIR/minimal_chibios/build"
+LINKER_SCRIPT="$PROJECT_DIR/stm32_flash.ld"
+SYSCALLS="$PROJECT_DIR/syscalls.c"
+CHIBIOS_DIR="$PROJECT_DIR/ChibiOS_F4_full"
+
+# -----------------------------
+# Toolchain
+# -----------------------------
+CC=arm-none-eabi-gcc
+CXX=arm-none-eabi-g++
+OBJCOPY=arm-none-eabi-objcopy
+SIZE=arm-none-eabi-size
+
+# -----------------------------
+# Outputs
+# -----------------------------
+ELF="$BUILD_DIR/main.elf"
+BIN="$BUILD_DIR/main.bin"
+
+# -----------------------------
+# Step 1: Verify essential files
+# -----------------------------
+echo "📋 Checking project health..."
+
+essential_files=(
+  "$SRC_DIR/main.cpp"
+  "$SRC_DIR/chconf.h"
+  "$SRC_DIR/halconf.h"
+  "$SRC_DIR/mcuconf.h"
+  "$SYSCALLS"
+  "$LINKER_SCRIPT"
+)
+
+missing=false
+for f in "${essential_files[@]}"; do
+  if [[ ! -f "$f" ]]; then
+    echo "❌ Essential file missing: $f"
+    missing=true
+  fi
+done
+
+if [[ "$missing" == true ]]; then
+  echo "⚠️ Build aborted. No backup was made."
+  exit 1
+fi
+
+# -----------------------------
+# Step 2: Backup (only if valid)
+# -----------------------------
+BACKUP_DIR="$PROJECT_DIR/Stage3_backup_$(date +%Y%m%d_%H%M%S)"
+echo "📦 Backing up healthy project..."
+mkdir -p "$BACKUP_DIR"
+cp -r "$PROJECT_DIR/minimal_chibios" "$BACKUP_DIR/"
+echo "✅ Backup saved to $BACKUP_DIR"
+
+# -----------------------------
+# Step 3: Clean build directory
+# -----------------------------
+echo "🧹 Cleaning build directory..."
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR"
+
+# -----------------------------
+# Step 4: Compile sources
+# -----------------------------
+echo "⚙️ Compiling sources..."
+$CXX -mcpu=cortex-m4 -mthumb -O2 -g \
+  -I"$SRC_DIR" -I"$CHIBIOS_DIR/os/rt/include" -I"$CHIBIOS_DIR/os/hal/include" \
+  -I"$CHIBIOS_DIR/os/common/startup/ARMCMx/devices/STM32F4xx" \
+  "$SRC_DIR/main.cpp" "$SYSCALLS" -T"$LINKER_SCRIPT" \
+  -o "$ELF"
+
+# -----------------------------
+# Step 5: Convert to binary
+# -----------------------------
+echo "📦 Creating binary..."
+$OBJCOPY -O binary "$ELF" "$BIN"
+$SIZE "$ELF"
+
+# -----------------------------
+# Step 6: Flash to board
+# -----------------------------
+if command -v st-flash &>/dev/null; then
+  echo "🔌 Flashing to board..."
+  st-flash write "$BIN" 0x8000000
+else
+  echo "⚠️ st-flash not found. Skipping upload."
+fi
+
+echo "🎉 Build complete!"
+```

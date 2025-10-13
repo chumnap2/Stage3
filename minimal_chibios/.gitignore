@@ -1,0 +1,67 @@
+# ============================================================
+# F´ (NASA F Prime) + Julia + ChibiOS Project Git Ignore
+# ============================================================
+
+# --- F´ Build Artifacts ---
+build-*/
+*_build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+*.elf
+*.bin
+*.hex
+*.map
+*.o
+*.a
+*.so
+
+# --- F´ Python Virtual Environment ---
+fprime-venv/
+.venv/
+env/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# --- Editor / OS junk ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.bak
+*.tmp
+*~
+
+# --- Logs and debug output ---
+*.log
+*.out
+*.err
+
+# --- Julia specific ---
+*.jl.cov
+*.jl.mem
+Manifest.toml
+*.ipynb
+.pluto_notebooks/
+
+# --- ChibiOS build output ---
+*.d
+*.lst
+*.map
+*.obj
+*.dep
+*.list
+
+# --- F´ generated artifacts ---
+Autocoders/
+Generated/
+GDS/
+docs/_build/
+
+# --- Local configuration ---
+.settings/
+.vscode/
+.idea/

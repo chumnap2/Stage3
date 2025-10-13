@@ -1,0 +1,179 @@
+#!/bin/bash
+# setup_and_run_vesc_ramp.sh
+# This script will:
+# - Create project directories.
+# - Generate stub files (led.hpp, uart.hpp, thread.hpp, main.cpp).
+# - Prepend author/date/program description headers automatically to all stubs.
+# - Generate CMakeLists.txt.
+# - Build and run the ramped VESC simulation.
+
+set -e
+set -x  # Show commands as they run
+
+AUTHOR="Chumnap Thach"
+DATE="$(date +%Y-%m-%d)"
+DESCRIPTION="This script will:
+- Create project directories.
+- Generate stub files (led.hpp, uart.hpp, thread.hpp, main.cpp).
+- Prepend author/date/program description headers automatically to all stubs.
+- Generate CMakeLists.txt.
+- Build and run the ramped VESC simulation."
+
+# -------------------------
+# Project directories
+mkdir -p include src build_vesc_ramp
+
+# -------------------------
+# LED stub
+cat > include/led.hpp <<'EOL'
+#pragma once
+#include <iostream>
+#include <string>
+class LED {
+    std::string name;
+    bool state;
+public:
+    LED(const std::string& n = "LED") : name(n), state(false) {}
+    static void init() { std::cout << "[LED] init\n"; }
+    void on()  { state = true;  std::cout << "[LED] " << name << " ON\n"; }
+    void off() { state = false; std::cout << "[LED] " << name << " OFF\n"; }
+};
+EOL
+
+# -------------------------
+# UART stub
+cat > include/uart.hpp <<'EOL'
+#pragma once
+#include <iostream>
+#include <string>
+class UART {
+    std::string name;
+public:
+    UART(const std::string& n = "UART") : name(n) {}
+    static void init() { std::cout << "[UART] init\n"; }
+    void send(const std::string& msg) { std::cout << "[UART] " << name << " TX: " << msg << "\n"; }
+    void receive(const std::string& msg) { std::cout << "[UART] " << name << " RX: " << msg << "\n"; }
+};
+EOL
+
+# -------------------------
+# Thread stub
+cat > include/thread.hpp <<'EOL'
+#pragma once
+#include <thread>
+#include <functional>
+class Thread {
+    std::thread t;
+public:
+    Thread(std::function<void()> func) : t(std::move(func)) {}
+    ~Thread() { if (t.joinable()) t.join(); }
+};
+EOL
+
+# -------------------------
+# main.cpp with correct signal handling
+cat > src/main.cpp <<'EOL'
+/*
+ * Author      : Chumnap Thach
+ * Date        : '"$DATE"'
+ * Description : '"$DESCRIPTION"'
+ * File        : main.cpp
+ */
+#include "led.hpp"
+#include "uart.hpp"
+#include "thread.hpp"
+#include <chrono>
+#include <thread>
+#include <atomic>
+#include <string>
+#include <iostream>
+#include <csignal>
+
+std::atomic<int> targetRPM{0};
+std::atomic<int> currentRPM{0};
+std::atomic<bool> stopFlag{false};
+
+void vescThread(UART* uart, LED* statusLED) {
+    while (!stopFlag.load()) {
+        int rpm = currentRPM.load();
+        int tgt = targetRPM.load();
+        if (rpm < tgt) rpm += 50;
+        else if (rpm > tgt) rpm -= 50;
+        currentRPM.store(rpm);
+
+        uart->receive("RPM:" + std::to_string(rpm));
+        if (rpm % 100 == 0) statusLED->on();
+        else statusLED->off();
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+}
+
+int main() {
+    LED::init();
+    UART::init();
+
+    LED statusLED("StatusLED");
+    UART vescUart("VESC_UART");
+
+    Thread t([&](){ vescThread(&vescUart, &statusLED); });
+
+    // Trap Ctrl+C
+    signal(SIGINT, [](int signum){
+        std::cout << "\n[INFO] Ctrl+C received. Stopping simulation...\n";
+        stopFlag.store(true);
+    });
+
+    // Ramp up loop
+    while (!stopFlag.load()) {
+        for (int rpm = 100; rpm <= 500; rpm += 100) {
+            targetRPM.store(rpm);
+            vescUart.send("SetRPM:" + std::to_string(rpm));
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            vescUart.send("GetRPM");
+            if (stopFlag.load()) break;
+        }
+    }
+
+    // Ramp down on exit
+    std::cout << "[INFO] Ramping down motor...\n";
+    while (currentRPM.load() > 0) {
+        int rpm = currentRPM.load() - 50;
+        if (rpm < 0) rpm = 0;
+        targetRPM.store(rpm);
+        vescUart.send("SetRPM:" + std::to_string(rpm));
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+    std::cout << "[INFO] Motor stopped. Last RPM: " << currentRPM.load() << "\n";
+
+    return 0;
+}
+EOL
+
+# -------------------------
+# CMakeLists.txt
+cat > CMakeLists.txt <<'EOL'
+cmake_minimum_required(VERSION 3.10)
+project(minimal_vesc_ramp LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+include_directories(include)
+
+set(SOURCES
+    src/main.cpp
+)
+
+add_executable(minimal_vesc_ramp ${SOURCES})
+find_package(Threads REQUIRED)
+target_link_libraries(minimal_vesc_ramp PRIVATE Threads::Threads)
+EOL
+
+# -------------------------
+# Build and run
+cd build_vesc_ramp
+cmake ..
+make -j$(nproc)
+
+echo "[SUCCESS] Build succeeded. Running ramped VESC simulation..."
+./minimal_vesc_ramp

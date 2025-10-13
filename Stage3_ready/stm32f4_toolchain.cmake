@@ -1,0 +1,6 @@
+set(CMAKE_SYSTEM_NAME Generic)
+set(CMAKE_C_COMPILER arm-none-eabi-gcc)
+set(CMAKE_CXX_COMPILER arm-none-eabi-g++)
+set(CMAKE_C_FLAGS "-mcpu=cortex-m4 -mthumb -O2 -Wall")
+set(CMAKE_CXX_FLAGS "-mcpu=cortex-m4 -mthumb -O2 -Wall -std=c++17")
+set(CMAKE_EXE_LINKER_FLAGS "-T${CMAKE_SOURCE_DIR}/build-stm32/STM32F4XX.ld -Wl,--gc-sections")
