@@ -36,6 +36,11 @@ Enter RPM: 200
 [TELEMETRY] RPM=200.0  Position=20.0°
 
 Press Ctrl+C to stop the simulator.
+⚡ Quick Start One-liner
+
+For immediate launch from anywhere:
+cd ~/fprime/Stage3/minimal_chibios/motor_control && julia ./motor_sim_terminal_scroll.jl
+
 📂 Project Structure
 Stage3/
 ├── minimal_chibios/
@@ -54,4 +59,5 @@ CSV logging creates a new file per session to avoid overwriting previous logs.
 ✅ Status
 MotorComponent simulator fully functional
 Real-time telemetry works
+Julia integration complete
 Stage3 project ready for experimentation
